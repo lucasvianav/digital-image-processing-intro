@@ -6,6 +6,7 @@
 
 import imageio
 import numpy as np
+from matplotlib import pyplot as plt
 from numpy.fft import fft2, fftshift, ifft2, ifftshift
 from numpy.typing import NDArray
 
@@ -109,7 +110,7 @@ def least_squares(g: NDArray, h: NDArray, gamma: float) -> NDArray[np.uint8]:
     return np.clip(np.real(f_hat), 0, 255).astype(np.uint8)
 
 
-def richardson_lucy(g: NDArray, psf: NDArray, n_steps: int):
+def richardson_lucy(g: NDArray, psf: NDArray, n_steps: int, eps=1e-12):
     """
     Richardsn-Lucy deconvolution for digital image restration (from motion blur).
 
@@ -118,6 +119,7 @@ def richardson_lucy(g: NDArray, psf: NDArray, n_steps: int):
     g (NDArray): image to be restored.
     psf (NDArray): point spread function (motion blur) matrix.
     n_steps (int): number of iteration steps to be performed.
+    eps (float): safe margin to prevent division-by-zero.
 
     Returns
     -------
@@ -131,11 +133,11 @@ def richardson_lucy(g: NDArray, psf: NDArray, n_steps: int):
     PSF = fft2(psf)
 
     for _ in range(n_steps):
-        tmp = fft2(g / ifft2(R * PSF)) * np.flip(PSF)
+        tmp = fft2(g / (ifft2(R * PSF) + eps)) * np.flip(PSF)
         r *= np.real(ifft2(tmp))
         R = fft2(r)
 
-    return np.clip(r, 0, 255).astype(np.uint8)
+    return np.clip(fftshift(r), 0, 255).astype(np.uint8)
 
 
 if __name__ == "__main__":
@@ -167,14 +169,22 @@ if __name__ == "__main__":
 
         # generate the point spread "function"
         psf = motion_blur(input_img.shape, angle)
-        PSF: NDArray = fftshift(fft2(psf))
 
-        # generate the motion-blurred image
-        F: NDArray = fftshift(fft2(input_img))
-        G = F * PSF
-        g = np.real(ifft2(ifftshift(G)))
+        # the degraded image is the original one
+        g = input_img
 
         restored_img = richardson_lucy(g, psf, n_steps)
+
+    plt.subplot(131)
+    plt.title("Original image")
+    plt.imshow(input_img, cmap="gray")
+    plt.subplot(132)
+    plt.title("Degraded image")
+    plt.imshow(g, cmap="gray")
+    plt.subplot(133)
+    plt.title("Restored image")
+    plt.imshow(restored_img, cmap="gray")
+    plt.show()
 
     # output the comparison between the original image and the restred one
     error = rmse(input_img, restored_img)
